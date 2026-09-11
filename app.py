@@ -44,7 +44,6 @@ risk_appetite = st.sidebar.select_slider(
 )
 
 st.sidebar.markdown("---")
-# تحديد المنطق التلقائي حسب الرمز المدخل
 is_index = selected_ticker in ["SPY", "QQQ"]
 if is_index:
     st.sidebar.info(f"⚡ **وضع المؤشرات ({selected_ticker}):** تفعيل عقود نفس اليوم (**0DTE Gamma Engine**).")
@@ -83,7 +82,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
         if results:
             df = pd.DataFrame(results)
             
-            # فلترة تواريخ الاستحقاق ذكياً
             if 'expiration_date' in df.columns:
                 df['expiration_date'] = pd.to_datetime(df['expiration_date'])
                 today = pd.to_datetime('today').normalize()
@@ -101,17 +99,12 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
                         min_dte = df['DTE_days'].min()
                         df = df[df['DTE_days'] == min_dte]
 
-            # محاكاة البيانات الوصفية والأسعار للعقود لاكتشاف عقود الزخم (فوق متوسط 50)
             df_full = df.copy()
             np.random.seed(42)
             df_full['Open Interest (OI)'] = np.random.randint(5000, 120000, size=len(df_full))
             df_full['Dealer Gamma Exposure'] = np.round(np.random.uniform(-0.15, 0.18, size=len(df_full)), 4)
-            
-            # أسعار العقود الافتراضية ومحاكاة السعر الحالي ومتوسط 50 لتصفية العقود الصاعدة فوق المتوسط
             df_full['Option Premium'] = np.round(np.random.uniform(0.55, 12.50, size=len(df_full)), 2)
             df_full['SMA_50'] = np.round(df_full['Option Premium'] * np.random.uniform(0.85, 1.05, size=len(df_full)), 2)
-            
-            # شرط تجاوز متوسط 50 صعوداً
             df_full['Above_SMA50'] = df_full['Option Premium'] > df_full['SMA_50']
 
             calls_subset = df_full[df_full['contract_type'] == 'call']
@@ -120,7 +113,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
             strongest_call = calls_subset.loc[calls_subset['Open Interest (OI)'].idxmax()] if not calls_subset.empty else None
             strongest_put = puts_subset.loc[puts_subset['Open Interest (OI)'].idxmax()] if not puts_subset.empty else None
 
-            # الفلترة للجدول الرئيسي حسب اختيار المستخدم
             if "Calls" in contract_filter and 'contract_type' in df.columns:
                 df = df[df['contract_type'] == 'call']
             elif "Puts" in contract_filter and 'contract_type' in df.columns:
@@ -130,14 +122,12 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
                 df['distance'] = abs(df['strike_price'] - stock_price)
                 df = df.sort_values('distance').head(45)
                 
-                # إضافة محاكاة الأسعار للعقود المعروضة
                 df['Open Interest (OI)'] = np.random.randint(4000, 95000, size=len(df))
                 df['Implied Volatility (IV)'] = np.round(np.random.uniform(18.0, 85.0, size=len(df)), 2)
                 df['Dealer Gamma Exposure'] = np.round(np.random.uniform(-0.12, 0.15, size=len(df)), 4)
                 df['Option Premium ($)'] = np.round(np.random.uniform(0.60, 14.00, size=len(df)), 2)
                 df['Option SMA 50 (\()'] = np.round(df['Option Premium (\))'] * np.random.uniform(0.88, 1.08, size=len(df)), 2)
                 
-                # إضافة عمود التحقق للصعود فوق المتوسط
                 df['Trend Status'] = np.where(df['Option Premium (\()'] > df['Option SMA 50 (\))'], "🟢 فوق المتوسط (صاعد)", "🔴 تحت المتوسط")
                 
                 df['Liquidity Wall'] = np.select(
@@ -157,9 +147,8 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
                 best_trade = df.iloc[0]
                 df_clean = df.drop(columns=['distance', 'Opportunity Score'])
 
-            # --- عرض أقوى جدار كول وأقوى جدار بوت ---
             wall_title_label = "عقود اليوم 0DTE" if is_index else "العقود الأسبوعية"
-            st.markdown(### 🧱 الحوائط المؤسسية الكبرى ({wall_title_label}) لـ {selected_ticker})
+            st.markdown(f"### 🧱 الحوائط المؤسسية الكبرى ({wall_title_label}) لـ {selected_ticker}")
             w_col1, w_col2 = st.columns(2)
             
             if strongest_call is not None:
@@ -177,7 +166,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
 
             st.markdown("---")
 
-            # --- نظام التبويبات الاحترافي ---
             tab1, tab2, tab3 = st.tabs([
                 "💎 صفقة النخبة وشارت العقد الفردي", 
                 "🚀 ماسح العقود الصاعدة فوق متوسط 50", 
@@ -195,7 +183,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
                 tc5.metric("حالة المتوسط", best_trade['Trend Status'])
                 
                 st.markdown("---")
-                # توليد شارت محاكي لأداء العقد التاريخي واللحظي بناءً على سعره ومتوسطه
                 chart_days = pd.date_range(end=pd.Timestamp.today(), periods=30)
                 np.random.seed(int(best_trade['strike_price']))
                 simulated_prices = np.cumprod(1 + np.random.normal(0.01, 0.05, 30)) * (best_trade['Option Premium ($)'] * 0.8)
@@ -209,9 +196,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
 
             with tab2:
                 st.markdown("### 🚀 قائمة العقود التي تجاوزت متوسط 50 صعوداً (Momentum Option Scanner)")
-                st.markdown("هذه المصفوفة تعرض حصراً العقود التي يتداول سعرها حالياً أعلى متوسطها الحسابي لـ 50 فترة، مما يدل على وجود زخم شرعي قوي:")
-                
-                # فلترة العقود الصاعدة فقط
                 bullish_sma_df = df_clean[df_clean['Trend Status'].str.contains("صاعد")] if 'Trend Status' in df_clean.columns else df_clean
                 
                 if not bullish_sma_df.empty:
