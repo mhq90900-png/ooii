@@ -49,34 +49,28 @@ if is_index:
 else:
     st.sidebar.info(f"🛡️ **وضع الأسهم الفردية ({selected_ticker}):** تفعيل العقود الأسبوعية (**Weekly Gamma Engine**).")
 
-# --- 1. جلب السعر اللحظي الفعلي للسهم (Live Snapshot) ---
-snapshot_url = f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/{selected_ticker}?apiKey={POLYGON_API_KEY}"
+# --- 1. جلب السعر الأساسي الموثوق للسهم ---
+price_url = f"https://api.polygon.io/v2/aggs/ticker/{selected_ticker}/prev?apiKey={POLYGON_API_KEY}"
 try:
-    snap_res = requests.get(snapshot_url).json()
-    ticker_data = snap_res.get("ticker", {})
-    
-    # محاولة جلب آخر سعر تداول مباشر، أو سعر الإغلاق اللحظي لجلسة اليوم
-    last_trade = ticker_data.get("lastTrade", {}).get("p", 0.0)
-    day_close = ticker_data.get("day", {}).get("c", 0.0)
-    prev_close = ticker_data.get("prevDay", {}).get("c", 0.0)
-    
-    stock_price = last_trade if last_trade > 0 else (day_close if day_close > 0 else prev_close)
+    p_res = requests.get(price_url).json()
+    results_list = p_res.get("results", [])
+    stock_price = results_list[0].get("c", 0.0) if results_list else 0.0
 except Exception:
     stock_price = 0.0
 
 if stock_price > 0:
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric(label=f"السعر اللحظي لـ {selected_ticker}", value=f"${stock_price:.2f}")
-    col2.metric(label="حالة صانع السوق (Dealer Bias)", value="Short Gamma 🔴" if stock_price % 2 == 0 else "Long Gamma 🟢", delta="تحديث حي مباشر")
-    col3.metric(label="نوع النطاق الزمني", value="عقود اليوم 0DTE ⚡" if is_index else "العقود الأسبوعية 📅", delta="متوافق مع السوق المفتوح")
+    col1.metric(label=f"السعر المرجعي لـ {selected_ticker}", value=f"${stock_price:.2f}")
+    col2.metric(label="حالة صانع السوق (Dealer Bias)", value="Short Gamma 🔴" if stock_price % 2 == 0 else "Long Gamma 🟢", delta="جاهز للتحليل")
+    col3.metric(label="نوع النطاق الزمني", value="عقود اليوم 0DTE ⚡" if is_index else "العقود الأسبوعية 📅", delta="محرك مخصص")
     col4.metric(label="ماسح الاتجاه", value="فوق متوسط 50 صعوداً 🚀", delta="نشط")
 else:
-    st.warning(f"⚠️ تعذر جلب السعر الفوري للرمز '{selected_ticker}'. تأكد من حالة السوق أو صحة الرمز.")
+    st.warning(f"⚠️ تعذر جلب السعر للرمز '{selected_ticker}'. تأكد من صحة الرمز أو صلاحية المفتاح.")
     st.stop()
 
-# --- 2. جلب عقود الخيارات الحية وتحليلها ---
+# --- 2. جلب عقود الخيارات وتحليلها ---
 target_mode_text = "عقود نفس اليوم (0DTE)" if is_index else "العقود الأسبوعية"
-with st.spinner(f"🔄 جاري الاتصال بخوادم Polygon لجلب عقود {selected_ticker} الحية..."):
+with st.spinner(f"🔄 جاري جلب وتحليل مصفوفة عقود {selected_ticker} ({target_mode_text})..."):
     url = f"https://api.polygon.io/v3/reference/options/contracts?underlying_ticker={selected_ticker}&limit=250&apiKey={POLYGON_API_KEY}"
     response = requests.get(url)
     
@@ -105,7 +99,7 @@ with st.spinner(f"🔄 جاري الاتصال بخوادم Polygon لجلب ع�
                         df = df[df['DTE_days'] == min_dte]
 
             df_full = df.copy()
-            np.random.seed(int(stock_price) % 100)  # تحديث البذور بناء على السعر الحقيقي لتغير ديناميكي
+            np.random.seed(int(stock_price) % 100)
             df_full['Open Interest (OI)'] = np.random.randint(5000, 120000, size=len(df_full))
             df_full['Dealer Gamma Exposure'] = np.round(np.random.uniform(-0.15, 0.18, size=len(df_full)), 4)
             df_full['Option Premium'] = np.round(np.random.uniform(0.55, 12.50, size=len(df_full)), 2)
@@ -209,6 +203,6 @@ with st.spinner(f"🔄 جاري الاتصال بخوادم Polygon لجلب ع�
                 st.caption(f"💡 توزيع تمركزات صانع السوق وحوائط السيولة لـ {selected_ticker}.")
 
         else:
-            st.error("لم يتم العثور على عقود نشطة مطابقة.")
+            st.error("لم يتم العثور على عقطة نشطة مطابقة.")
     else:
         st.error(f"خطأ في الاتصال بخوادم البيانات: {response.status_code}")
