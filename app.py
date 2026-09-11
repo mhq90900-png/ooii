@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import requests
 import math
-import plotly.graph_objects as go
 
 # 1. إعدادات الصفحة الاحترافية المتقدمة
 st.set_page_config(
@@ -52,7 +51,6 @@ contract_filter = st.sidebar.selectbox(
     ["الكل (Calls & Puts)", "عقود الشراء فقط (Calls)", "عقود البيع فقط (Puts)"]
 )
 
-# --- إضافة فلتر مدة الانتهاء (0DTE) ---
 dte_filter = st.sidebar.radio(
     "⏳ نطاق تاريخ الاستحقاق (DTE Filter)",
     ["جميع العقود المتاحة", "عقود اليوم فقط (0DTE Focus) ⚡", "عقود طويلة الأجل (> 7 أيام) 🛡️"]
@@ -96,7 +94,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
     if not df_raw.empty and 'strike_price' in df_raw.columns:
         df = df_raw.copy()
         
-        # حساب أعداد الأيام للانتهاء DTE
         if 'expiration_date' in df.columns:
             df['expiration_date'] = pd.to_datetime(df['expiration_date'])
             today = pd.to_datetime('today').normalize()
@@ -106,7 +103,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
             df['DTE_days'] = 30
             df['DTE'] = 30 / 365.0
 
-        # تطبيق فلتر DTE
         if "0DTE" in dte_filter:
             df = df[df['DTE_days'] <= 1].copy()
         elif "> 7 أيام" in dte_filter:
@@ -116,13 +112,11 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
             st.error("⚠️ لا توجد عقود مطابقة لفلتر تاريخ الانتهاء المحدد.")
             st.stop()
 
-        # تصفية العقود القريبة من السعر الحالي (±25%)
         df = df[(df['strike_price'] >= stock_price * 0.75) & (df['strike_price'] <= stock_price * 1.25)].copy()
         
         df['Open Interest (OI)'] = df.get('open_interest', 1200)
         df['Implied Volatility (IV)'] = 0.45
 
-        # حساب Dealer Gamma Exposure (GEX)
         gex_list = []
         for _, row in df.iterrows():
             gamma_val = calculate_gamma(
@@ -138,7 +132,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
 
         df['Dealer Gamma Exposure ($M)'] = gex_list
 
-        # استخراج الجدران الرئيسية
         calls_subset = df[df['contract_type'] == 'call']
         puts_subset = df[df['contract_type'] == 'put']
         
@@ -147,7 +140,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
 
         total_gex = df['Dealer Gamma Exposure ($M)'].sum()
         
-        # حساب نقطة Gamma Flip Level التقريبية
         strikes_gex = df.groupby('strike_price')['Dealer Gamma Exposure ($M)'].sum().reset_index()
         strikes_gex['cum_gex'] = strikes_gex['Dealer Gamma Exposure ($M)'].cumsum()
         flip_row = strikes_gex.iloc[(strikes_gex['cum_gex']).abs().argsort()[:1]]
@@ -169,7 +161,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
 
         st.markdown("---")
 
-        # --- عرض أقوى جدار كول وأقوى جدار بوت ---
         st.markdown("### 🧱 الحوائط المؤسسية الكبرى المسيطرة على السوق (Strongest Walls)")
         w_col1, w_col2 = st.columns(2)
         
@@ -188,7 +179,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
 
         st.markdown("---")
 
-        # الفلترة للعرض في الجدول
         if "Calls" in contract_filter:
             df_display = df[df['contract_type'] == 'call'].copy()
         elif "Puts" in contract_filter:
@@ -199,67 +189,18 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
         df_display['distance'] = abs(df_display['strike_price'] - stock_price)
         df_display = df_display.sort_values('distance').head(45)
 
-        # --- نظام التبويبات (Advanced UI Tabs) ---
         tab1, tab2, tab3 = st.tabs([
-            "📊 خريطة الحوائط والقاما التفاعلية (Plotly Interactive GEX)", 
+            "📊 خارطة القاما والتحليل البياني", 
             "💎 توصية النخبة والمصفوفة الحية", 
             "🧠 التحليل المؤسسي ونبض الجلسة"
         ])
 
         with tab1:
-            st.markdown("### 📈 خريطة تعرّض القاما التفاعلية (Institutional Gamma & Wall Profile)")
-            
-            grouped_gex = df.groupby(['strike_price', 'contract_type'])['Dealer Gamma Exposure ($M)'].sum().unstack(fill_value=0).reset_index()
-            
-            fig = go.Figure()
-            
-            if 'put' in grouped_gex.columns:
-                fig.add_trace(go.Bar(
-                    x=grouped_gex['strike_price'],
-                    y=grouped_gex['put'],
-                    name='Put Gamma (Support)',
-                    marker_color='#ef4444'
-                ))
-
-            if 'call' in grouped_gex.columns:
-                fig.add_trace(go.Bar(
-                    x=grouped_gex['strike_price'],
-                    y=grouped_gex['call'],
-                    name='Call Gamma (Resistance)',
-                    marker_color='#22c55e'
-                ))
-
-            fig.add_vline(
-                x=stock_price, 
-                line_dash="dash", 
-                line_color="#3b82f6", 
-                line_width=3,
-                annotation_text=f"السعر الحالي: ${stock_price:.2f}", 
-                annotation_position="top right"
-            )
-
-            fig.add_vline(
-                x=gamma_flip_level, 
-                line_dash="dot", 
-                line_color="#f59e0b", 
-                line_width=2,
-                annotation_text=f"Flip Level: ${gamma_flip_level:.2f}", 
-                annotation_position="bottom left"
-            )
-
-            fig.update_layout(
-                title=f"توزيع تعرّض القاما (GEX) لـ {selected_ticker} حسب سعر التنفيذ",
-                xaxis_title="سعر التنفيذ (Strike Price)",
-                yaxis_title="Dealer GEX ($ Millions)",
-                barmode='relative',
-                paper_bgcolor='#0b0f19',
-                plot_bgcolor='#131b2e',
-                font=dict(color='#cbd5e1'),
-                height=520,
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
+            st.markdown("### 📈 توزيع تعرّض القاما (GEX) حسب أسعار التنفيذ")
+            chart_data = df.groupby('strike_price')['Dealer Gamma Exposure ($M)'].sum().reset_index()
+            chart_data.set_index('strike_price', inplace=True)
+            st.bar_chart(chart_data)
+            st.caption(f"📍 السعر الحالي للسهم: \({stock_price:.2f} | ⚡ نقطة انقسام القاما:\){gamma_flip_level:.2f}")
 
         with tab2:
             st.markdown("### 🎯 المصفوفة الحية لفرص العقود")
