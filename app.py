@@ -14,13 +14,7 @@ st.set_page_config(
 
 # تصميم بصري مخصص متطور (Elite Dark Theme CSS)
 st.markdown("""
-    <style>
-    .main { background-color: #0b0f19; }
-    .stMetric { background-color: #131b2e; padding: 16px; border-radius: 12px; border: 1px solid #1f293d; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] { background-color: #131b2e; border-radius: 8px; padding: 10px 20px; color: #cbd5e1; border: 1px solid #1f293d; }
-    .stTabs [aria-selected="true"] { background-color: #3b82f6 !important; color: white !important; font-weight: bold; }
-    </style>
+    
 """, unsafe_allow_html=True)
 
 st.title("⚡ OI-X: Institutional Options Intelligence & Gamma Engine")
@@ -153,7 +147,7 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
 
         total_gex = df['Dealer Gamma Exposure ($M)'].sum()
         
-        # حساب نقطة Gamma Flip Level التقريبية (تحديد السعر الذي ينقلب عنده الصافي)
+        # حساب نقطة Gamma Flip Level التقريبية
         strikes_gex = df.groupby('strike_price')['Dealer Gamma Exposure ($M)'].sum().reset_index()
         strikes_gex['cum_gex'] = strikes_gex['Dealer Gamma Exposure ($M)'].cumsum()
         flip_row = strikes_gex.iloc[(strikes_gex['cum_gex']).abs().argsort()[:1]]
@@ -215,12 +209,10 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
         with tab1:
             st.markdown("### 📈 خريطة تعرّض القاما التفاعلية (Institutional Gamma & Wall Profile)")
             
-            # تجميع البيانات للرسم التفاعلي
             grouped_gex = df.groupby(['strike_price', 'contract_type'])['Dealer Gamma Exposure ($M)'].sum().unstack(fill_value=0).reset_index()
             
             fig = go.Figure()
             
-            # إضافة أعمدة Puts (أحمر)
             if 'put' in grouped_gex.columns:
                 fig.add_trace(go.Bar(
                     x=grouped_gex['strike_price'],
@@ -229,7 +221,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
                     marker_color='#ef4444'
                 ))
 
-            # إضافة أعمدة Calls (أخضر)
             if 'call' in grouped_gex.columns:
                 fig.add_trace(go.Bar(
                     x=grouped_gex['strike_price'],
@@ -238,7 +229,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
                     marker_color='#22c55e'
                 ))
 
-            # خط رأسي لسعر السهم الحالي
             fig.add_vline(
                 x=stock_price, 
                 line_dash="dash", 
@@ -248,7 +238,6 @@ with st.spinner(f"🔄 جاري تحليل مصفوفة خيارات {selected_t
                 annotation_position="top right"
             )
 
-            # خط رأسي لنقطة Gamma Flip Level
             fig.add_vline(
                 x=gamma_flip_level, 
                 line_dash="dot", 
