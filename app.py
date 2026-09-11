@@ -123,16 +123,16 @@ with st.spinner(f"🔄 جاري جلب وتحليل مصفوفة عقود {selec
                 df['Open Interest (OI)'] = np.random.randint(4000, 95000, size=len(df))
                 df['Implied Volatility (IV)'] = np.round(np.random.uniform(18.0, 85.0, size=len(df)), 2)
                 df['Dealer Gamma Exposure'] = np.round(np.random.uniform(-0.12, 0.15, size=len(df)), 4)
-                df['Option Premium ($)'] = np.round(np.random.uniform(0.60, 14.00, size=len(df)), 2)
-                df['Option SMA 50 (\()'] = np.round(df['Option Premium (\))'] * np.random.uniform(0.88, 1.08, size=len(df)), 2)
+                df['Option Premium'] = np.round(np.random.uniform(0.60, 14.00, size=len(df)), 2)
+                df['Option SMA 50'] = np.round(df['Option Premium'] * np.random.uniform(0.88, 1.08, size=len(df)), 2)
                 
-                df['Trend Status'] = np.where(df['Option Premium (\()'] > df['Option SMA 50 (\))'], "🟢 فوق المتوسط (صاعد)", "🔴 تحت المتوسط")
+                df['Trend Status'] = np.where(df['Option Premium'] > df['Option SMA 50'], "🟢 فوق المتوسط (صاعد)", "🔴 تحت المتوسط")
                 
                 multiplier = 1.6 if "هجومي" in risk_appetite else 1.0
                 df['Opportunity Score'] = (
                     (df['Open Interest (OI)'] * 0.00025) + 
                     (abs(df['Dealer Gamma Exposure']) * 18 * multiplier) + 
-                    (np.where(df['Option Premium (\()'] > df['Option SMA 50 (\))'], 15, 0))
+                    (np.where(df['Option Premium'] > df['Option SMA 50'], 15, 0))
                 )
                 
                 df = df.sort_values(by='Opportunity Score', ascending=False)
@@ -170,14 +170,14 @@ with st.spinner(f"🔄 جاري جلب وتحليل مصفوفة عقود {selec
                 tc1, tc2, tc3, tc4, tc5 = st.columns(5)
                 tc1.metric("رمز العقد الفعلي", best_trade['ticker'])
                 tc2.metric("التنفيذ والنوع", f"{best_trade['contract_type'].upper()} @ ${best_trade['strike_price']}")
-                tc3.metric("سعر العقد الحالي (Premium)", f"\({best_trade['Option Premium (\))']}")
-                tc4.metric("متوسط 50 للعقد (SMA 50)", f"\({best_trade['Option SMA 50 (\))']}")
+                tc3.metric("سعر العقد الحالي (Premium)", f"${best_trade['Option Premium']}")
+                tc4.metric("متوسط 50 للعقد (SMA 50)", f"${best_trade['Option SMA 50']}")
                 tc5.metric("حالة المتوسط", best_trade['Trend Status'])
                 
                 st.markdown("---")
                 chart_days = pd.date_range(end=pd.Timestamp.today(), periods=30)
                 np.random.seed(int(best_trade['strike_price']))
-                simulated_prices = np.cumprod(1 + np.random.normal(0.01, 0.05, 30)) * (best_trade['Option Premium ($)'] * 0.8)
+                simulated_prices = np.cumprod(1 + np.random.normal(0.01, 0.05, 30)) * (best_trade['Option Premium'] * 0.8)
                 chart_df = pd.DataFrame({
                     "سعر العقد": simulated_prices,
                     "متوسط 50 العقد": simulated_prices * 0.95
@@ -191,7 +191,7 @@ with st.spinner(f"🔄 جاري جلب وتحليل مصفوفة عقود {selec
                 bullish_sma_df = df_clean[df_clean['Trend Status'].str.contains("صاعد")] if 'Trend Status' in df_clean.columns else df_clean
                 
                 if not bullish_sma_df.empty:
-                    display_cols = [c for c in ['ticker', 'contract_type', 'strike_price', 'expiration_date', 'DTE_days', 'Option Premium (\()', 'Option SMA 50 (\))', 'Trend Status', 'Open Interest (OI)'] if c in bullish_sma_df.columns]
+                    display_cols = [c for c in ['ticker', 'contract_type', 'strike_price', 'expiration_date', 'DTE_days', 'Option Premium', 'Option SMA 50', 'Trend Status', 'Open Interest (OI)'] if c in bullish_sma_df.columns]
                     st.dataframe(bullish_sma_df[display_cols], use_container_width=True, height=420)
                 else:
                     st.info("لا توجد عقود مطابقة حالياً لشروط الصعود فوق متوسط 50 ضمن النطاق المحدد.")
@@ -203,6 +203,6 @@ with st.spinner(f"🔄 جاري جلب وتحليل مصفوفة عقود {selec
                 st.caption(f"💡 توزيع تمركزات صانع السوق وحوائط السيولة لـ {selected_ticker}.")
 
         else:
-            st.error("لم يتم العثور على عقطة نشطة مطابقة.")
+            st.error("لم يتم العثور على عقود نشطة مطابقة.")
     else:
         st.error(f"خطأ في الاتصال بخوادم البيانات: {response.status_code}")
